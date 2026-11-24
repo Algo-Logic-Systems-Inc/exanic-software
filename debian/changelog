@@ -1,3 +1,11 @@
+exanic (2.7.6-1al1) jammy; urgency=medium
+
+  * Count user mappings of DMA buffers instead of reading page_count, so
+    the driver no longer crashes and hangs the card when the IOMMU remaps
+    DMA memory (see cisco/exanic-software#121).
+
+ -- Algo-Logic Systems, Inc. <support@algo-logic.com>  Tue, 24 Nov 2026 15:00:00 -0800
+
 exanic (2.7.2-git-1) stable; urgency=low
 
   * Debian/Ubuntu packaging
