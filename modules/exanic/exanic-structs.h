@@ -43,6 +43,7 @@ struct exanic_port
     dma_addr_t rx_region_dma;
     dma_addr_t ate_rx_region_dma;
     unsigned int rx_refcount; /* Only counts in-kernel users. */
+    atomic_t rx_mmap_users;   /* userspace mmap count for rx_region */
     unsigned numa_node;
     size_t tx_region_usable_offset;
     size_t tx_region_usable_size;
@@ -105,6 +106,7 @@ struct exanic
     phys_addr_t devkit_regs_ex_phys;
     phys_addr_t devkit_mem_ex_phys;
     dma_addr_t tx_feedback_dma;
+    atomic_t tx_feedback_mmap_users;  /* userspace mmap count for tx_feedback */
 
     unsigned int dma_addr_bits;
     size_t regs_size;
@@ -182,6 +184,7 @@ struct exanic_filter_buffer
     dma_addr_t region_dma;
     unsigned numa_node;
     int refcount;
+    atomic_t mmap_users;  /* userspace mmap count */
 };
 
 struct exanic_ip_filter_slot

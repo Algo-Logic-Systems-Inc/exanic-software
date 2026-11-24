@@ -131,8 +131,7 @@ bool exanic_rx_in_use(struct exanic *exanic, unsigned port_num)
 
     if (exanic->port[port_num].rx_region_virt)
     {
-        /* Check if the region is mapped */
-        if (page_count(virt_to_page(exanic->port[port_num].rx_region_virt)) > 1)
+        if (atomic_read(&exanic->port[port_num].rx_mmap_users) > 0)
             return true;
     }
 
@@ -151,15 +150,12 @@ bool exanic_rx_in_use(struct exanic *exanic, unsigned port_num)
  */
 int exanic_count_tx_feedback_users(struct exanic *exanic)
 {
-    int i, count = 0;
+    int count = 0;
 
     /* Check if the region is mapped */
     if (exanic->tx_feedback_virt)
     {
-        for (i = 0; i < EXANIC_TX_FEEDBACK_NUM_PAGES; i++)
-            /* subtract 1 since we have a mapping */
-            count += page_count(virt_to_page(exanic->tx_feedback_virt + i * PAGE_SIZE)) - 1;
-
+        count += atomic_read(&exanic->tx_feedback_mmap_users);
         return count;
     }
 
@@ -177,11 +173,10 @@ int exanic_count_rx_users(struct exanic *exanic)
     for (i = 0; i < exanic->num_ports; i++)
     {
         if (exanic->port[i].rx_region_virt)
-            /* subtract 1 since we have a mapping */
-            count += page_count(virt_to_page(exanic->port[i].rx_region_virt)) - 1;
+            count += atomic_read(&exanic->port[i].rx_mmap_users);
 
         for (buf = 0; buf < exanic->max_filter_buffers; buf++)
-            count += exanic->port[i].filter_buffers[buf].refcount;
+            count += atomic_read(&exanic->port[i].filter_buffers[buf].mmap_users);
     }
 
     return count;
@@ -1230,6 +1225,7 @@ static int exanic_probe(struct pci_dev *pdev,
         goto err_tx_feedback_alloc;
     }
 
+    atomic_set(&exanic->tx_feedback_mmap_users, 0);
     bitmap_zero(exanic->tx_feedback_bitmap, EXANIC_TX_FEEDBACK_NUM_SLOTS);
 
     if ((exanic->tx_feedback_dma >> 32) == 0)
@@ -1254,6 +1250,7 @@ static int exanic_probe(struct pci_dev *pdev,
         exanic->port[port_num].rx_region_virt = NULL;
         exanic->port[port_num].rx_region_dma = 0;
         exanic->port[port_num].rx_refcount = 0;
+        atomic_set(&exanic->port[port_num].rx_mmap_users, 0);
         if (exanic->tx_region_size > 0)
         {
             exanic->port[port_num].tx_region_usable_offset =
