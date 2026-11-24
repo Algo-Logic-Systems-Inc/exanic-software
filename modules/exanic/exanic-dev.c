@@ -21,6 +21,30 @@
 #include "exanic.h"
 #include "exanic-structs.h"
 
+/* VMA operations for tracking userspace mappings of DMA regions.
+ * vm_private_data points to an atomic_t mmap user counter in the
+ * exanic/port struct, which outlives any VMA.
+ * open is called on fork (VMA duplication); close on munmap/exit.
+ */
+static void exanic_mmap_open(struct vm_area_struct *vma)
+{
+    atomic_t *counter = vma->vm_private_data;
+    if (counter)
+        atomic_inc(counter);
+}
+
+static void exanic_mmap_close(struct vm_area_struct *vma)
+{
+    atomic_t *counter = vma->vm_private_data;
+    if (counter)
+        atomic_dec(counter);
+}
+
+static const struct vm_operations_struct exanic_mmap_ops = {
+    .open  = exanic_mmap_open,
+    .close = exanic_mmap_close,
+};
+
 /**
  * Handles /dev/exanic open().
  */
@@ -363,6 +387,10 @@ static int exanic_map_tx_feedback(struct exanic *exanic,
     }
 #endif
 
+    atomic_inc(&exanic->tx_feedback_mmap_users);
+    vma->vm_private_data = &exanic->tx_feedback_mmap_users;
+    vma->vm_ops = &exanic_mmap_ops;
+
     phys_addr = virt_to_phys(exanic->tx_feedback_virt);
     dev_dbg(dev, DRV_NAME
         "%u: Mapped TX feedback region at phys: 0x%pap, virt: 0x%p.\n",
@@ -500,6 +528,20 @@ static int exanic_map_rx_region(struct exanic *exanic, struct vm_area_struct *vm
         }
     }
 #endif
+
+    if (buffer_num > 0)
+    {
+        atomic_t *ctr = &exanic->port[port_num].filter_buffers[buffer_num - 1].mmap_users;
+        atomic_inc(ctr);
+        vma->vm_private_data = ctr;
+    }
+    else
+    {
+        atomic_t *ctr = &exanic->port[port_num].rx_mmap_users;
+        atomic_inc(ctr);
+        vma->vm_private_data = ctr;
+    }
+    vma->vm_ops = &exanic_mmap_ops;
 
     phys_addr = virt_to_phys(rx_region_virt);
     dev_dbg(dev, DRV_NAME
